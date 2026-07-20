@@ -1,9 +1,0 @@
-{
-  "name": "Flexible Rock Weigher",
-  "short_name": "RockWeigher",
-  "start_url": ".",
-  "display": "standalone",
-  "background_color": "#1e1e1e",
-  "description": "A customizable rock weighing PWA",
-  "icons": []
-}
