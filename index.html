@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Armor Rock Gradation</title>
+  <link rel="manifest" href="manifest.json" />
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js')
+          .then(reg => console.log('SW registered:', reg))
+          .catch(err => console.error('SW failed:', err));
+      });
+    }
+    window.addEventListener('beforeunload', (e) => {
+      e.preventDefault();
+      e.returnValue = '';
+    });
+
+    // Prevent iOS Safari double-tap zoom on buttons
+    document.addEventListener('touchstart', function(e) {
+      if (e.target.tagName === 'BUTTON') {
+        e.preventDefault();
+        e.target.click();
+      }
+    }, { passive: false });
+  </script>
+  <style>
+    :root {
+      --bg: #1e1e1e; --panel:#2c2c2c; --muted:#3a3a3a; --text:#f0f0f0; --brand:#22c55e; --brand-d:#16a34a; --warn:#f59e0b; --bad:#ef4444; --good:#10b981; --info:#7dd3fc;
+    }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background-color: var(--bg); color: var(--text); padding: 20px; }
+    .container { background: var(--panel); padding: 20px; border-radius: 12px; box-shadow: 0 0 20px rgba(0,0,0,0.35); max-width: 1100px; margin: auto; }
+    h1 { text-align: center; margin-top: 0; }
+    .row { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    @media (min-width: 760px){ .row { grid-template-columns: 2fr 1fr; } }
+
+    #rockWeight { width: 100%; padding: 16px; font-size: 24px; border-radius: 10px; border: none; background-color: #444; color: white; text-align: right; letter-spacing: 1px; }
+    .numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+    .numpad button { padding: 18px; font-size: 22px; border-radius: 10px; border: none; background-color: var(--brand); color: white; cursor: pointer; touch-action: manipulation; }
+    .numpad button:hover { background-color: var(--brand-d); }
+    .enter-button { grid-column: span 3; padding: 22px; font-size: 20px; margin-top: 6px; }
+    button.action { width: 100%; padding: 12px; margin: 6px 0; background-color: #28a745; color: white; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; touch-action: manipulation; }
+    button.secondary { background: #475569; }
+    .inline { display:inline-flex; gap:8px; flex-wrap:wrap }
+
+    details > summary { list-style: none; }
+    summary.settings { background-color: var(--warn); color: white; padding: 12px; margin: 8px 0; border-radius: 8px; cursor: pointer; font-size: 16px; text-align: center; }
+
+    #results, #savedLogs, #rockList { margin-top: 16px; }
+    pre { background-color: var(--muted); padding: 12px; overflow-x: auto; border-radius: 8px; }
+    .log-entry { border-bottom: 1px solid #444; padding: 6px 0; display:flex; align-items:center; gap:8px }
+    .log-entry input { width: 120px; padding:6px 8px; border-radius:8px; border:1px solid #555; background:#222; color:#fff }
+
+    .stat-grid { display:grid; grid-template-columns: repeat(2,1fr); gap:10px; }
+    @media (min-width: 760px){ .stat-grid { grid-template-columns: repeat(3,1fr); } }
+    .card { background: #232323; border:1px solid #333; border-radius:10px; padding:12px }
+    .muted { color:#cbd5e1; font-size:12px }
+    .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:12px; margin-left:6px }
+    .pass { background: rgba(16,185,129,.15); color: var(--good); border:1px solid rgba(16,185,129,.35) }
+    .fail { background: rgba(239,68,68,.15); color: var(--bad); border:1px solid rgba(239,68,68,.35) }
+
+    .kv { display:flex; justify-content:space-between; align-items:center; margin:4px 0; }
+    .kv strong { font-size: 14px; }
+
+    .chips { display:flex; flex-wrap:wrap; gap:8px }
+    .chip { padding:6px 10px; background:#334155; border-radius:999px; font-size:12px; cursor:pointer; touch-action: manipulation; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Armor Rock Gradation</h1>
+
+    <div class="row">
+      <!-- Left side: Results -->
+      <div>
+        <div id="results"></div>
+        <div id="rockList"></div>
+        <div id="savedLogs"></div>
+      </div>
+
+      <!-- Right side: Numpad and Controls -->
+      <div>
+        <input type="text" id="rockWeight" placeholder="Enter rock weight (lbs)" readonly>
+        <div class="numpad" id="numpad"></div>
+        <div class="inline">
+          <button class="action" id="undoBtn">Undo Last</button>
+          <button class="action secondary" id="resetBtn">Reset Current</button>
+          <button class="action" id="finishBtn">Finish + Save Log</button>
+        </div>
+        <details>
+          <summary class="settings">More Options</summary>
+          <div style="margin-top: 10px;">
+            <div class="inline">
+              <button class="action" id="viewSaved">View Saved Logs</button>
+              <button class="action" id="dlLastTxt">Download Last Log (.txt)</button>
+              <button class="action" id="dlLastCsv">Export Last Log (.csv)</button>
+            </div>
+            <div class="inline">
+              <button class="action secondary" id="dlAllTxt">Export All Logs (.txt)</button>
+              <button class="action secondary" id="dlAllCsv">Export All Logs (.csv)</button>
+              <button class="action" style="background:#dc2626" id="clearAll">Clear All Logs</button>
+            </div>
+          </div>
+        </details>
+
+        <details>
+          <summary class="settings" style="background:#06b6d4">Criteria & Settings</summary>
+          <div class="card" style="margin-top:10px">
+            <div class="chips">
+              <span>Avg pass min (lbs)</span>
+              <input id="avgMin" type="number" step="1" style="width:120px"/>
+              <span>Undersize &lt;</span>
+              <input id="underMax" type="number" step="1" style="width:120px"/>
+              <span>Near range</span>
+              <input id="nearMin" type="number" step="1" style="width:100px"/>–
+              <input id="nearMax" type="number" step="1" style="width:100px"/>
+              <span>In-spec</span>
+              <input id="inMin" type="number" step="1" style="width:100px"/>–
+              <input id="inMax" type="number" step="1" style="width:100px"/>
+              <span>Over range</span>
+              <input id="overMin" type="number" step="1" style="width:100px"/>–
+              <input id="overMax" type="number" step="1" style="width:100px"/>
+              <span>Near max % by wt</span>
+              <input id="nearPctMax" type="number" step="0.01" style="width:100px"/>
+              <span>Over max % by wt</span>
+              <input id="overPctMax" type="number" step="0.01" style="width:100px"/>
+              <button class="chip" id="saveSettings">Save</button>
+              <button class="chip" id="resetSettings">Reset</button>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== State & Settings =====
+    let rockWeights = JSON.parse(localStorage.getItem('armorRockAutosave') || '[]');
+    let currentLog = {};
+    const input = document.getElementById('rockWeight');
+    const numpad = document.getElementById('numpad');
+    let currentEntry = '';
+
+    const DEFAULTS = {
+      avgMin: 5400,
+      underMax: 3500,
+      nearMin: 3500,
+      nearMax: 3700,
+      inMin: 3700,
+      inMax: 7500,
+      overMin: 7500,
+      overMax: 8500,
+      nearPctMax: 3, // % by weight
+      overPctMax: 10 // % by weight
+    };
+    let SETTINGS = JSON.parse(localStorage.getItem('armorRockSettings') || 'null') || { ...DEFAULTS };
+
+    function saveSettings(){ localStorage.setItem('armorRockSettings', JSON.stringify(SETTINGS)); updateDisplay(); }
+    function resetSettings(){ SETTINGS = { ...DEFAULTS }; saveSettings(); loadSettingsUI(); }
+    function loadSettingsUI(){
+      for (const k of Object.keys(DEFAULTS)) {
+        const el = document.getElementById(k);
+        if (el) el.value = SETTINGS[k];
+      }
+    }
+
+    // ===== Numpad & Input =====
+    const buttons = ['1','2','3','4','5','6','7','8','9','.', '0','⌫'];
+    buttons.forEach(char => {
+      const btn = document.createElement('button');
+      btn.textContent = char;
+      btn.onclick = () => handleNumpad(char);
+      numpad.appendChild(btn);
+    });
+    const enterBtn = document.createElement('button');
+    enterBtn.textContent = 'Enter Weight';
+    enterBtn.className = 'numpad button enter-button';
+    enterBtn.onclick = () => handleNumpad('ENT');
+    numpad.appendChild(enterBtn);
+
+    function handleNumpad(char) {
+      if (char === '⌫') {
+        currentEntry = currentEntry.slice(0, -1);
+      } else if (char === 'ENT') {
+        const weight = parseFloat(currentEntry);
+        if (!isNaN(weight)) {
+          rockWeights.push(weight);
+          updateDisplay();
+        }
+        currentEntry = '';
+      } else {
+        currentEntry += char;
+      }
+      input.value = currentEntry;
+    }
+
+    // Keyboard support
+    window.addEventListener('keydown', (e)=>{
+      if (e.key === 'Enter') handleNumpad('ENT');
+      else if (e.key === 'Backspace') handleNumpad('⌫');
+      else if (/^[0-9.]$/.test(e.key)) handleNumpad(e.key);
+    });
+
+    // ===== Helpers =====
+    function sum(arr){ return arr.reduce((s,v)=>s+v,0); }
+    function pct(part,total){ return total>0 ? (part/total*100) : 0; }
+
+    function bucketize(weights){
+      const S = SETTINGS;
+      const undersize = weights.filter(w => w < S.underMax);
+      const near = weights.filter(w => w >= S.nearMin && w < S.nearMax);
+      const inspec = weights.filter(w => w >= S.inMin && w <= S.inMax);
+      const over = weights.filter(w => w > S.overMin && w <= S.overMax);
+      const oos = weights.filter(w => w > S.overMax);
+      return { undersize, near, inspec, over, oos };
+    }
+
+    function stats(){
+      const total = rockWeights.length;
+      const totalWeight = sum(rockWeights);
+      const totalTons = totalWeight / 2000; // tons
+      const avgWeight = total>0 ? totalWeight/total : 0;
+      const { undersize, near, inspec, over, oos } = bucketize(rockWeights);
+      const overWt = sum(over);
+      const nearWt = sum(near);
+      const overPct = pct(overWt, totalWeight);
+      const nearPct = pct(nearWt, totalWeight);
+      return { total, totalWeight, totalTons, avgWeight, undersize, near, inspec, over, oos, overWt, nearWt, overPct, nearPct };
+    }
+
+    function badge(pass){ return `<span class="badge ${pass?'pass':'fail'}">${pass?'PASS':'FAIL'}</span>`; }
+
+    // ===== UI Rendering =====
+    function updateDisplay() {
+      localStorage.setItem('armorRockAutosave', JSON.stringify(rockWeights));
+      const S = SETTINGS;
+      const st = stats();
+
+      currentLog = {
+        timestamp: new Date().toLocaleString(),
+        weights: [...rockWeights],
+        total: st.total,
+        totalWeight: +st.totalWeight.toFixed(2),
+        totalTons: +st.totalTons.toFixed(3),
+        avgWeight: +st.avgWeight.toFixed(2),
+        undersize: st.undersize.length,
+        inspec: st.inspec.length,
+        oversizePercent: +st.overPct.toFixed(2),
+        nearUndersizePercent: +st.nearPct.toFixed(2),
+        outOfSpec: st.oos.length
+      };
+
+      const avgOk = st.avgWeight >= S.avgMin;
+      const overOk = st.overPct <= S.overPctMax;
+      const nearOk = st.nearPct <= S.nearPctMax;
+
+      const res = `
+        <div class="stat-grid">
+          <div class="card"><div class="kv"><strong>Total rocks</strong><div>${st.total}</div></div>
+            <div class="kv"><span class="muted">Total weight</span><div>${st.totalWeight.toFixed(2)} lbs</div></div>
+            <div class="kv"><span class="muted">Total tons</span><div>${st.totalTons.toFixed(3)} tons</div></div>
+            <div class="kv"><span class="muted">Average</span><div>${st.avgWeight.toFixed(2)} lbs ${badge(avgOk)}</div></div>
+          </div>
+          <div class="card"><div class="kv"><strong>Undersize (&lt;${S.underMax})</strong><div>${st.undersize.length}</div></div>
+            <div class="kv"><span class="muted">Near ${S.nearMin}-${S.nearMax} lbs</span><div>${st.near.length} | ${(st.nearPct).toFixed(2)}% ${badge(nearOk)}</div></div>
+            <div class="kv"><span class="muted">In-Spec ${S.inMin}-${S.inMax} lbs</span><div>${st.inspec.length}</div></div>
+          </div>
+          <div class="card"><div class="kv"><strong>Oversize % by wt (${S.overMin}-${S.overMax})</strong><div>${st.overPct.toFixed(2)}% ${badge(overOk)}</div></div>
+            <div class="kv"><span class="muted">Out of Spec (&gt;${S.overMax})</span><div>${st.oos.length}</div></div>
+          </div>
+        </div>`;
+
+      document.getElementById('results').innerHTML = res;
+
+      document.getElementById('rockList').innerHTML = `<p><strong>Rocks Entered (click to edit):</strong></p>${rockWeights.map((w, i) => `
+        <div class='log-entry'>
+          <span>${i + 1}:</span>
+          <input type='number' value='${w}' step='0.01' onchange='updateWeight(${i}, this.value)' /> lbs
+          <button class='chip' onclick='removeWeight(${i})'>Remove</button>
+        </div>`).join('')}`;
+    }
+
+    // ===== CRUD operations =====
+    function updateWeight(index, value) {
+      const v = parseFloat(value);
+      if (!isNaN(v)) { rockWeights[index] = v; updateDisplay(); }
+    }
+    function removeWeight(index){ rockWeights.splice(index,1); updateDisplay(); }
+
+    function finishLog() {
+      if (!rockWeights.length) { alert('Add some rocks first!'); return; }
+      const logs = JSON.parse(localStorage.getItem('armorRockLogs') || '[]');
+      logs.push(currentLog);
+      localStorage.setItem('armorRockLogs', JSON.stringify(logs));
+      alert('Log saved!');
+      rockWeights = [];
+      updateDisplay();
+    }
+
+    function viewSavedLogs() {
+      const logs = JSON.parse(localStorage.getItem('armorRockLogs') || '[]');
+      if (!logs.length) { document.getElementById('savedLogs').innerHTML = '<p>No saved logs found.</p>'; return; }
+      const detailed = logs.map((log, idx) => `Log ${idx + 1} — ${log.timestamp}\n  Total: ${log.total} rocks\n  Total Weight: ${(+log.totalWeight).toFixed(2)} lbs\n  Total Tons: ${(+log.totalTons).toFixed(3)} tons\n  Avg: ${(+log.avgWeight).toFixed(2)} lbs\n  Undersize: ${log.undersize}\n  Near Undersize %: ${(+log.nearUndersizePercent).toFixed(2)}\n  In Spec: ${log.inspec}\n  Oversize %: ${(+log.oversizePercent).toFixed(2)}\n  Out of Spec: ${log.outOfSpec}\n  Weights: ${log.weights.join(', ')}`).join('\n\n');
+      document.getElementById('savedLogs').innerHTML = `
+        <h3>All Saved Logs (${logs.length})</h3>
+        <pre>${detailed}</pre>
+      `;
+    }
+
+    function downloadLastLog() {
+      const logs = JSON.parse(localStorage.getItem('armorRockLogs') || '[]');
+      if (!logs.length) { alert('No logs available to download.'); return; }
+      const log = logs[logs.length - 1];
+      const content = `Timestamp: ${log.timestamp}\nTotal Rocks: ${log.total}\nTotal Weight: ${(+log.totalWeight).toFixed(2)} lbs\nTotal Tons: ${(+log.totalTons).toFixed(3)} tons\nAverage Weight: ${(+log.avgWeight).toFixed(2)} lbs\nUndersize: ${log.undersize}\nNear Undersize %: ${(+log.nearUndersizePercent).toFixed(2)}\nIn Spec: ${log.inspec}\nOversize %: ${(+log.oversizePercent).toFixed(2)}\nOut of Spec: ${log.outOfSpec}\nWeights: ${log.weights.join(', ')}`;
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `armor_log_${new Date().toISOString().split('T')[0]}.txt`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    }
+
+    function downloadCSV() {
+      const logs = JSON.parse(localStorage.getItem('armorRockLogs') || '[]');
+      if (!logs.length) { alert('No logs to export.'); return; }
+      const log = logs[logs.length - 1];
+      const header = ['Metric', 'Value'];
+      const data = [
+        ['Total Rocks', log.total],
+        ['Total Weight (lbs)', (+log.totalWeight).toFixed(2)],
+        ['Total Tons', (+log.totalTons).toFixed(3)],
+        ['Average Weight (lbs)', (+log.avgWeight).toFixed(2)],
+        ['Undersize', log.undersize],
+        ['Near Undersize %', (+log.nearUndersizePercent).toFixed(2)],
+        ['In Spec', log.inspec],
+        ['Oversize %', (+log.oversizePercent).toFixed(2)],
+        ['Out of Spec', log.outOfSpec],
+        ...log.weights.map((w, i) => [`Rock ${i + 1}`, w])
+      ];
+      const csv = [header, ...data].map(row => row.join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `armor_log_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    }
+
+    function downloadAllLogsTxt() {
+      const logs = JSON.parse(localStorage.getItem('armorRockLogs') || '[]');
+      if (!logs.length) { alert('No logs available.'); return; }
+      const content = logs.map((log, idx) => `Log ${idx + 1} — ${log.timestamp}\nTotal: ${log.total} rocks\nTotal Weight: ${(+log.totalWeight).toFixed(2)} lbs\nTotal Tons: ${(+log.totalTons).toFixed(3)} tons\nAverage Weight: ${(+log.avgWeight).toFixed(2)} lbs\nUndersize: ${log.undersize}\nNear Undersize %: ${(+log.nearUndersizePercent).toFixed(2)}\nIn Spec: ${log.inspec}\nOversize %: ${(+log.oversizePercent).toFixed(2)}\nOut of Spec: ${log.outOfSpec}\nWeights: ${log.weights.join(', ')}`).join('\n\n');
+      const blob = new Blob([content], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `armor_logs_all_${new Date().toISOString().split('T')[0]}.txt`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    }
+
+    function downloadAllLogsCSV() {
+      const logs = JSON.parse(localStorage.getItem('armorRockLogs') || '[]');
+      if (!logs.length) { alert('No logs available.'); return; }
+      let csv = 'Log,Timestamp,Total Rocks,Total Weight (lbs),Total Tons,Average Weight (lbs),Undersize,Near Undersize %,In Spec,Oversize %,Out of Spec,Rock #,Weight (lbs)\n';
+      logs.forEach((log, idx) => {
+        log.weights.forEach((w, i) => {
+          csv += `${idx + 1},${log.timestamp},${log.total},${(+log.totalWeight).toFixed(2)},${(+log.totalTons).toFixed(3)},${(+log.avgWeight).toFixed(2)},${log.undersize},${(+log.nearUndersizePercent).toFixed(2)},${log.inspec},${(+log.oversizePercent).toFixed(2)},${log.outOfSpec},${i + 1},${w}\n`;
+        });
+      });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `armor_logs_all_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    }
+
+    function clearAllLogs() {
+      if (confirm('Are you sure you want to delete ALL saved logs? This cannot be undone.')) {
+        localStorage.removeItem('armorRockLogs');
+        document.getElementById('savedLogs').innerHTML = '<p>All logs cleared.</p>';
+      }
+    }
+
+    function resetLog() {
+      if (confirm('Reset the current log? This cannot be undone.')) {
+        rockWeights = [];
+        currentEntry = '';
+        input.value = '';
+        updateDisplay();
+      }
+    }
+
+    function undoLast(){ if(rockWeights.length){ rockWeights.pop(); updateDisplay(); } }
+
+    // Wire buttons
+    document.getElementById('finishBtn').onclick = finishLog;
+    document.getElementById('viewSaved').onclick = viewSavedLogs;
+    document.getElementById('dlLastTxt').onclick = downloadLastLog;
+    document.getElementById('dlLastCsv').onclick = downloadCSV;
+    document.getElementById('dlAllTxt').onclick = downloadAllLogsTxt;
+    document.getElementById('dlAllCsv').onclick = downloadAllLogsCSV;
+    document.getElementById('clearAll').onclick = clearAllLogs;
+    document.getElementById('resetBtn').onclick = resetLog;
+    document.getElementById('undoBtn').onclick = undoLast;
+
+    document.getElementById('saveSettings').onclick = () => {
+      const fields = ['avgMin','underMax','nearMin','nearMax','inMin','inMax','overMin','overMax','nearPctMax','overPctMax'];
+      for (const k of fields){ const el = document.getElementById(k); const v = parseFloat(el.value); if(!isNaN(v)) SETTINGS[k] = v; }
+      saveSettings();
+    };
+    document.getElementById('resetSettings').onclick = resetSettings;
+
+    // Init
+    loadSettingsUI();
+    updateDisplay();
+  </script>
+</body>
+</html>
