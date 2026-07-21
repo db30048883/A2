@@ -183,7 +183,7 @@
 
       <!-- Right side: Numpad and Controls -->
       <div class="controls-column">
-        <input type="text" id="rockWeight" placeholder="Enter rock weight (lbs)" readonly>
+        <input type="text" id="rockWeight" placeholder="Enter rock weight (tons)" readonly>
         <div class="numpad" id="numpad"></div>
         <div class="inline">
           <button class="action" id="undoBtn">Undo Last</button>
@@ -208,11 +208,11 @@
               <summary class="settings" style="background:#06b6d4">Spec Settings</summary>
               <div class="card criteria-card" style="margin-top:10px">
                 <div class="settings-grid">
-                  <label class="setting-field">Average pass minimum (lbs)
-                    <input id="avgMin" type="number" step="1" inputmode="numeric"/>
+                  <label class="setting-field">Average pass minimum (tons)
+                    <input id="avgMin" type="number" step="0.01" inputmode="decimal"/>
                   </label>
-                  <label class="setting-field">Allowed weight range (lbs)
-                    <span class="range-inputs"><input id="inMin" type="number" step="1" inputmode="numeric"/><span>to</span><input id="inMax" type="number" step="1" inputmode="numeric"/></span>
+                  <label class="setting-field">Allowed weight range (tons)
+                    <span class="range-inputs"><input id="inMin" type="number" step="0.01" inputmode="decimal"/><span>to</span><input id="inMax" type="number" step="0.01" inputmode="decimal"/></span>
                   </label>
                 </div>
                 <div class="settings-actions">
@@ -229,14 +229,14 @@
 
   <script>
     // ===== State & Settings =====
-    let rockWeights = JSON.parse(localStorage.getItem('a2RockAutosave') || '[]');
+    let rockWeights = JSON.parse(localStorage.getItem('a2RockAutosaveTons') || '[]');
     let currentLog = {};
     const input = document.getElementById('rockWeight');
     const numpad = document.getElementById('numpad');
     let currentEntry = '';
 
-    const SPEC_VERSION = 'A2-20000-34000-v1';
-    const DEFAULTS = { avgMin: 27000, inMin: 20000, inMax: 34000 };
+    const SPEC_VERSION = 'A2-tons-10-17-v2';
+    const DEFAULTS = { avgMin: 13.5, inMin: 10, inMax: 17 };
     const savedSettings = JSON.parse(localStorage.getItem('a2RockSettings') || 'null');
     let SETTINGS = localStorage.getItem('a2RockSpecVersion') === SPEC_VERSION
       ? { ...DEFAULTS, ...(savedSettings || {}) }
@@ -311,14 +311,15 @@
 
     function stats(){
       const total = rockWeights.length;
-      const totalWeight = sum(rockWeights);
-      const totalTons = totalWeight / 2000; // tons
-      const avgWeight = total>0 ? totalWeight/total : 0;
+      const totalTons = sum(rockWeights);
+      const avgTons = total>0 ? totalTons/total : 0;
       const { undersize, inspec, oversize } = bucketize(rockWeights);
-      return { total, totalWeight, totalTons, avgWeight, undersize, inspec, oversize };
+      return { total, totalTons, avgTons, undersize, inspec, oversize };
     }
 
-    function fmtLb(value){ return Math.round(value).toLocaleString('en-US'); }
+    function fmtTons(value){
+      return Number(value).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+    }
     function badge(state){
       if (state === null) return '<span class="badge waiting-badge">WAITING</span>';
       return `<span class="badge ${state?'pass':'fail'}">${state?'PASS':'FAIL'}</span>`;
@@ -331,7 +332,7 @@
 
     // ===== UI Rendering =====
     function updateDisplay() {
-      localStorage.setItem('a2RockAutosave', JSON.stringify(rockWeights));
+      localStorage.setItem('a2RockAutosaveTons', JSON.stringify(rockWeights));
       const S = SETTINGS;
       const st = stats();
       const hasRocks = st.total > 0;
@@ -340,22 +341,21 @@
         timestamp: new Date().toLocaleString(),
         weights: [...rockWeights],
         total: st.total,
-        totalWeight: +st.totalWeight.toFixed(2),
         totalTons: +st.totalTons.toFixed(3),
-        avgWeight: +st.avgWeight.toFixed(2),
+        avgTons: +st.avgTons.toFixed(3),
         undersize: st.undersize.length,
         inspec: st.inspec.length,
         oversize: st.oversize.length,
-        lotPass: hasRocks && st.avgWeight >= S.avgMin && st.undersize.length === 0 && st.oversize.length === 0
+        lotPass: hasRocks && st.avgTons >= S.avgMin && st.undersize.length === 0 && st.oversize.length === 0
       };
 
-      const avgOk = hasRocks && st.avgWeight >= S.avgMin;
+      const avgOk = hasRocks && st.avgTons >= S.avgMin;
       const weightsOk = hasRocks && st.undersize.length === 0 && st.oversize.length === 0;
       const lotPass = hasRocks && avgOk && weightsOk;
       const failures = [];
       if (hasRocks && st.undersize.length) failures.push(`${st.undersize.length} undersize rock${st.undersize.length === 1 ? '' : 's'}`);
       if (hasRocks && st.oversize.length) failures.push(`${st.oversize.length} oversize rock${st.oversize.length === 1 ? '' : 's'}`);
-      if (hasRocks && !avgOk) failures.push(`average is ${fmtLb(S.avgMin - st.avgWeight)} lb below minimum`);
+      if (hasRocks && !avgOk) failures.push(`average is ${fmtTons(S.avgMin - st.avgTons)} tons below minimum`);
       const lotClass = !hasRocks ? 'waiting' : lotPass ? 'passing' : 'failing';
       const lotLabel = !hasRocks ? 'ENTER ROCKS' : lotPass ? 'LOT PASSES' : 'LOT FAILS';
       const lotReason = !hasRocks
@@ -365,7 +365,7 @@
           : failures.join(' • ');
 
       document.getElementById('specBanner').innerHTML =
-        `A2 SPEC: ${fmtLb(S.inMin)}&ndash;${fmtLb(S.inMax)} lb &nbsp;|&nbsp; Average &ge; ${fmtLb(S.avgMin)} lb &nbsp;|&nbsp; Zero out-of-spec allowed`;
+        `A2 SPEC: ${fmtTons(S.inMin)}&ndash;${fmtTons(S.inMax)} tons &nbsp;|&nbsp; Average &ge; ${fmtTons(S.avgMin)} tons &nbsp;|&nbsp; Zero out-of-spec allowed`;
 
       const res = `
         <div class="lot-status-card ${lotClass}">
@@ -375,14 +375,13 @@
         </div>
         <div class="stat-grid">
           <div class="card"><div class="kv"><strong>Rocks entered</strong><div>${st.total}</div></div>
-            <div class="kv"><span class="muted">Total weight</span><div>${fmtLb(st.totalWeight)} lb</div></div>
             <div class="kv"><span class="muted">Total tons</span><div>${st.totalTons.toFixed(3)} tons</div></div>
-            <div class="kv"><span class="muted">Average</span><div>${hasRocks ? `${fmtLb(st.avgWeight)} lb` : '&mdash;'} ${badge(hasRocks ? avgOk : null)}</div></div>
+            <div class="kv"><span class="muted">Average</span><div>${hasRocks ? `${fmtTons(st.avgTons)} tons` : '&mdash;'} ${badge(hasRocks ? avgOk : null)}</div></div>
           </div>
           <div class="card"><div class="kv"><strong>Individual weights</strong><div>${badge(hasRocks ? weightsOk : null)}</div></div>
-            <div class="kv"><span class="muted">Undersize (&lt;${fmtLb(S.inMin)})</span><div>${st.undersize.length}</div></div>
-            <div class="kv"><span class="muted">In spec (${fmtLb(S.inMin)}&ndash;${fmtLb(S.inMax)})</span><div>${st.inspec.length}</div></div>
-            <div class="kv"><span class="muted">Oversize (&gt;${fmtLb(S.inMax)})</span><div>${st.oversize.length}</div></div>
+            <div class="kv"><span class="muted">Undersize (&lt;${fmtTons(S.inMin)})</span><div>${st.undersize.length}</div></div>
+            <div class="kv"><span class="muted">In spec (${fmtTons(S.inMin)}&ndash;${fmtTons(S.inMax)})</span><div>${st.inspec.length}</div></div>
+            <div class="kv"><span class="muted">Oversize (&gt;${fmtTons(S.inMax)})</span><div>${st.oversize.length}</div></div>
           </div>
         </div>`;
 
@@ -393,7 +392,7 @@
             const status = rockClassification(w);
             return `<div class="log-entry ${status.rowClass}">
               <span>${i + 1}.</span>
-              <input aria-label="Rock ${i + 1} weight" type="number" value="${w}" step="1" onchange="updateWeight(${i}, this.value)" /> lb
+              <input aria-label="Rock ${i + 1} weight" type="number" value="${w}" step="0.01" onchange="updateWeight(${i}, this.value)" /> tons
               <span class="rock-status ${status.badgeClass}">${status.label}</span>
               <button class="chip" onclick="removeWeight(${i})">Remove</button>
             </div>`;
@@ -410,18 +409,18 @@
 
     function finishLog() {
       if (!rockWeights.length) { alert('Add some rocks first!'); return; }
-      const logs = JSON.parse(localStorage.getItem('a2RockLogs') || '[]');
+      const logs = JSON.parse(localStorage.getItem('a2RockLogsTons') || '[]');
       logs.push(currentLog);
-      localStorage.setItem('a2RockLogs', JSON.stringify(logs));
+      localStorage.setItem('a2RockLogsTons', JSON.stringify(logs));
       alert('Log saved!');
       rockWeights = [];
       updateDisplay();
     }
 
     function viewSavedLogs() {
-      const logs = JSON.parse(localStorage.getItem('a2RockLogs') || '[]');
+      const logs = JSON.parse(localStorage.getItem('a2RockLogsTons') || '[]');
       if (!logs.length) { document.getElementById('savedLogs').innerHTML = '<p>No saved logs found.</p>'; return; }
-      const detailed = logs.map((log, idx) => `Log ${idx + 1} — ${log.timestamp}\n  Total: ${log.total} rocks\n  Total Weight: ${(+log.totalWeight).toFixed(2)} lbs\n  Total Tons: ${(+log.totalTons).toFixed(3)} tons\n  Avg: ${(+log.avgWeight).toFixed(2)} lbs\n  Undersize: ${log.undersize || 0}\n  In Spec: ${log.inspec || 0}\n  Oversize: ${log.oversize ?? log.outOfSpec ?? 0}\n  Lot Status: ${log.lotPass === true ? 'PASS' : 'FAIL'}\n  Weights: ${log.weights.join(', ')}`).join('\n\n');
+      const detailed = logs.map((log, idx) => `Log ${idx + 1} — ${log.timestamp}\n  Total: ${log.total} rocks\n  Total Tons: ${(+log.totalTons).toFixed(3)} tons\n  Average: ${(+log.avgTons).toFixed(3)} tons\n  Undersize: ${log.undersize || 0}\n  In Spec: ${log.inspec || 0}\n  Oversize: ${log.oversize || 0}\n  Lot Status: ${log.lotPass === true ? 'PASS' : 'FAIL'}\n  Weights (tons): ${log.weights.join(', ')}`).join('\n\n');
       document.getElementById('savedLogs').innerHTML = `
         <h3>All Saved Logs (${logs.length})</h3>
         <pre>${detailed}</pre>
@@ -429,10 +428,10 @@
     }
 
     function downloadLastLog() {
-      const logs = JSON.parse(localStorage.getItem('a2RockLogs') || '[]');
+      const logs = JSON.parse(localStorage.getItem('a2RockLogsTons') || '[]');
       if (!logs.length) { alert('No logs available to download.'); return; }
       const log = logs[logs.length - 1];
-      const content = `Timestamp: ${log.timestamp}\nTotal Rocks: ${log.total}\nTotal Weight: ${(+log.totalWeight).toFixed(2)} lbs\nTotal Tons: ${(+log.totalTons).toFixed(3)} tons\nAverage Weight: ${(+log.avgWeight).toFixed(2)} lbs\nUndersize: ${log.undersize || 0}\nIn Spec: ${log.inspec || 0}\nOversize: ${log.oversize ?? log.outOfSpec ?? 0}\nLot Status: ${log.lotPass === true ? 'PASS' : 'FAIL'}\nWeights: ${log.weights.join(', ')}`;
+      const content = `Timestamp: ${log.timestamp}\nTotal Rocks: ${log.total}\nTotal Tons: ${(+log.totalTons).toFixed(3)} tons\nAverage: ${(+log.avgTons).toFixed(3)} tons\nUndersize: ${log.undersize || 0}\nIn Spec: ${log.inspec || 0}\nOversize: ${log.oversize || 0}\nLot Status: ${log.lotPass === true ? 'PASS' : 'FAIL'}\nWeights (tons): ${log.weights.join(', ')}`;
       const blob = new Blob([content], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -441,20 +440,19 @@
     }
 
     function downloadCSV() {
-      const logs = JSON.parse(localStorage.getItem('a2RockLogs') || '[]');
+      const logs = JSON.parse(localStorage.getItem('a2RockLogsTons') || '[]');
       if (!logs.length) { alert('No logs to export.'); return; }
       const log = logs[logs.length - 1];
       const header = ['Metric', 'Value'];
       const data = [
         ['Total Rocks', log.total],
-        ['Total Weight (lbs)', (+log.totalWeight).toFixed(2)],
         ['Total Tons', (+log.totalTons).toFixed(3)],
-        ['Average Weight (lbs)', (+log.avgWeight).toFixed(2)],
+        ['Average (tons)', (+log.avgTons).toFixed(3)],
         ['Undersize', log.undersize || 0],
         ['In Spec', log.inspec || 0],
-        ['Oversize', log.oversize ?? log.outOfSpec ?? 0],
+        ['Oversize', log.oversize || 0],
         ['Lot Status', log.lotPass === true ? 'PASS' : 'FAIL'],
-        ...log.weights.map((w, i) => [`Rock ${i + 1}`, w])
+        ...log.weights.map((w, i) => [`Rock ${i + 1} (tons)`, w])
       ];
       const csv = [header, ...data].map(row => row.join(',')).join('\n');
       const blob = new Blob([csv], { type: 'text/csv' });
@@ -464,9 +462,9 @@
     }
 
     function downloadAllLogsTxt() {
-      const logs = JSON.parse(localStorage.getItem('a2RockLogs') || '[]');
+      const logs = JSON.parse(localStorage.getItem('a2RockLogsTons') || '[]');
       if (!logs.length) { alert('No logs available.'); return; }
-      const content = logs.map((log, idx) => `Log ${idx + 1} — ${log.timestamp}\nTotal: ${log.total} rocks\nTotal Weight: ${(+log.totalWeight).toFixed(2)} lbs\nTotal Tons: ${(+log.totalTons).toFixed(3)} tons\nAverage Weight: ${(+log.avgWeight).toFixed(2)} lbs\nUndersize: ${log.undersize || 0}\nIn Spec: ${log.inspec || 0}\nOversize: ${log.oversize ?? log.outOfSpec ?? 0}\nLot Status: ${log.lotPass === true ? 'PASS' : 'FAIL'}\nWeights: ${log.weights.join(', ')}`).join('\n\n');
+      const content = logs.map((log, idx) => `Log ${idx + 1} — ${log.timestamp}\nTotal: ${log.total} rocks\nTotal Tons: ${(+log.totalTons).toFixed(3)} tons\nAverage: ${(+log.avgTons).toFixed(3)} tons\nUndersize: ${log.undersize || 0}\nIn Spec: ${log.inspec || 0}\nOversize: ${log.oversize || 0}\nLot Status: ${log.lotPass === true ? 'PASS' : 'FAIL'}\nWeights (tons): ${log.weights.join(', ')}`).join('\n\n');
       const blob = new Blob([content], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = `a2_logs_all_${new Date().toISOString().split('T')[0]}.txt`;
@@ -474,12 +472,12 @@
     }
 
     function downloadAllLogsCSV() {
-      const logs = JSON.parse(localStorage.getItem('a2RockLogs') || '[]');
+      const logs = JSON.parse(localStorage.getItem('a2RockLogsTons') || '[]');
       if (!logs.length) { alert('No logs available.'); return; }
-      let csv = 'Log,Timestamp,Total Rocks,Total Weight (lbs),Total Tons,Average Weight (lbs),Undersize,In Spec,Oversize,Lot Status,Rock #,Weight (lbs)\n';
+      let csv = 'Log,Timestamp,Total Rocks,Total Tons,Average (tons),Undersize,In Spec,Oversize,Lot Status,Rock #,Weight (tons)\n';
       logs.forEach((log, idx) => {
         log.weights.forEach((w, i) => {
-          csv += `${idx + 1},${log.timestamp},${log.total},${(+log.totalWeight).toFixed(2)},${(+log.totalTons).toFixed(3)},${(+log.avgWeight).toFixed(2)},${log.undersize || 0},${log.inspec || 0},${log.oversize ?? log.outOfSpec ?? 0},${log.lotPass === true ? 'PASS' : 'FAIL'},${i + 1},${w}\n`;
+          csv += `${idx + 1},${log.timestamp},${log.total},${(+log.totalTons).toFixed(3)},${(+log.avgTons).toFixed(3)},${log.undersize || 0},${log.inspec || 0},${log.oversize || 0},${log.lotPass === true ? 'PASS' : 'FAIL'},${i + 1},${w}\n`;
         });
       });
       const blob = new Blob([csv], { type: 'text/csv' });
@@ -490,7 +488,7 @@
 
     function clearAllLogs() {
       if (confirm('Are you sure you want to delete ALL saved logs? This cannot be undone.')) {
-        localStorage.removeItem('a2RockLogs');
+        localStorage.removeItem('a2RockLogsTons');
         document.getElementById('savedLogs').innerHTML = '<p>All logs cleared.</p>';
       }
     }
