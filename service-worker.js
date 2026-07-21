@@ -1,10 +1,11 @@
-const CACHE_NAME = 'a2-rock-cache-v3';
+const CACHE_NAME = 'a2-rock-cache-v4';
 const CORE_ASSETS = ['./', './index.html', './manifest.json'];
+const EXCELJS_URL = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
 
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(CORE_ASSETS))
+      .then(cache => cache.addAll(CORE_ASSETS).then(() => cache.add(EXCELJS_URL).catch(() => undefined)))
       .then(() => self.skipWaiting())
   );
 });
