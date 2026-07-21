@@ -35,7 +35,24 @@
     .container { background: var(--panel); padding: 20px; border-radius: 12px; box-shadow: 0 0 20px rgba(0,0,0,0.35); max-width: 1100px; margin: auto; }
     h1 { text-align: center; margin-top: 0; }
     .row { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    @media (max-width: 759px){
+      body { padding: 10px; }
+      .container { padding: 12px; }
+      .controls-column { order: -1; }
+    }
     @media (min-width: 760px){ .row { grid-template-columns: 2fr 1fr; } }
+
+    .spec-banner {
+      margin: 0 0 14px;
+      padding: 13px 16px;
+      border: 2px solid #38bdf8;
+      border-radius: 10px;
+      background: rgba(14,165,233,.12);
+      color: #e0f2fe;
+      font-size: 17px;
+      font-weight: 700;
+      text-align: center;
+    }
 
     #rockWeight { width: 100%; padding: 16px; font-size: 24px; border-radius: 10px; border: none; background-color: #444; color: white; text-align: right; letter-spacing: 1px; }
     .numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
@@ -120,16 +137,29 @@
 
     #results, #savedLogs, #rockList { margin-top: 16px; }
     pre { background-color: var(--muted); padding: 12px; overflow-x: auto; border-radius: 8px; }
-    .log-entry { border-bottom: 1px solid #444; padding: 6px 0; display:flex; align-items:center; gap:8px }
-    .log-entry input { width: 120px; padding:6px 8px; border-radius:8px; border:1px solid #555; background:#222; color:#fff }
+    .log-entry { margin: 7px 0; padding: 9px; display:flex; align-items:center; gap:8px; border:1px solid #444; border-left-width:5px; border-radius:8px; background:#202020; }
+    .log-entry.rock-pass { border-left-color: var(--good); }
+    .log-entry.rock-fail { border-left-color: var(--bad); background:rgba(239,68,68,.08); }
+    .log-entry input { min-width:0; width:140px; padding:8px 10px; border-radius:8px; border:1px solid #555; background:#151515; color:#fff; font-size:18px; }
+    .rock-status { margin-left:auto; padding:4px 8px; border-radius:999px; font-size:11px; font-weight:800; }
+    .rock-status.in-spec { color:#6ee7b7; background:rgba(16,185,129,.16); }
+    .rock-status.out-spec { color:#fca5a5; background:rgba(239,68,68,.18); }
 
-    .stat-grid { display:grid; grid-template-columns: repeat(2,1fr); gap:10px; }
-    @media (min-width: 760px){ .stat-grid { grid-template-columns: repeat(3,1fr); } }
+    .lot-status-card { margin-bottom:10px; padding:18px; border:2px solid; border-radius:12px; text-align:center; }
+    .lot-status-card.waiting { border-color:var(--warn); background:rgba(245,158,11,.13); }
+    .lot-status-card.passing { border-color:var(--good); background:rgba(16,185,129,.14); }
+    .lot-status-card.failing { border-color:var(--bad); background:rgba(239,68,68,.14); }
+    .lot-status-label { font-size:13px; font-weight:800; letter-spacing:1.5px; }
+    .lot-status-value { margin:4px 0; font-size:30px; font-weight:900; }
+    .lot-status-reason { color:#e2e8f0; font-size:15px; }
+    .stat-grid { display:grid; grid-template-columns: 1fr; gap:10px; }
+    @media (min-width: 520px){ .stat-grid { grid-template-columns: repeat(2,1fr); } }
     .card { background: #232323; border:1px solid #333; border-radius:10px; padding:12px }
     .muted { color:#cbd5e1; font-size:12px }
     .badge { display:inline-block; padding:2px 8px; border-radius:20px; font-size:12px; margin-left:6px }
     .pass { background: rgba(16,185,129,.15); color: var(--good); border:1px solid rgba(16,185,129,.35) }
     .fail { background: rgba(239,68,68,.15); color: var(--bad); border:1px solid rgba(239,68,68,.35) }
+    .waiting-badge { background:rgba(245,158,11,.15); color:#fbbf24; border:1px solid rgba(245,158,11,.4); }
 
     .kv { display:flex; justify-content:space-between; align-items:center; margin:4px 0; }
     .kv strong { font-size: 14px; }
@@ -141,17 +171,18 @@
 <body>
   <div class="container">
     <h1>A2 Gradation</h1>
+    <div class="spec-banner" id="specBanner"></div>
 
     <div class="row">
       <!-- Left side: Results -->
-      <div>
+      <div class="results-column">
         <div id="results"></div>
         <div id="rockList"></div>
         <div id="savedLogs"></div>
       </div>
 
       <!-- Right side: Numpad and Controls -->
-      <div>
+      <div class="controls-column">
         <input type="text" id="rockWeight" placeholder="Enter rock weight (lbs)" readonly>
         <div class="numpad" id="numpad"></div>
         <div class="inline">
@@ -159,7 +190,7 @@
           <button class="action secondary" id="resetBtn">Reset Current</button>
           <button class="action" id="finishBtn">Finish + Save Log</button>
         </div>
-        <details>
+        <details class="more-options">
           <summary class="settings">More Options</summary>
           <div style="margin-top: 10px;">
             <div class="inline">
@@ -172,24 +203,24 @@
               <button class="action secondary" id="dlAllCsv">Export All Logs (.csv)</button>
               <button class="action" style="background:#dc2626" id="clearAll">Clear All Logs</button>
             </div>
-          </div>
-        </details>
 
-        <details class="criteria-settings">
-          <summary class="settings" style="background:#06b6d4">Criteria & Settings</summary>
-          <div class="card criteria-card" style="margin-top:10px">
-            <div class="settings-grid">
-              <label class="setting-field">Average pass minimum (lbs)
-                <input id="avgMin" type="number" step="1" inputmode="numeric"/>
-              </label>
-              <label class="setting-field">Allowed weight range (lbs)
-                <span class="range-inputs"><input id="inMin" type="number" step="1" inputmode="numeric"/><span>to</span><input id="inMax" type="number" step="1" inputmode="numeric"/></span>
-              </label>
-            </div>
-            <div class="settings-actions">
-              <button id="saveSettings">Save Settings</button>
-              <button id="resetSettings">Reset Defaults</button>
-            </div>
+            <details class="criteria-settings">
+              <summary class="settings" style="background:#06b6d4">Spec Settings</summary>
+              <div class="card criteria-card" style="margin-top:10px">
+                <div class="settings-grid">
+                  <label class="setting-field">Average pass minimum (lbs)
+                    <input id="avgMin" type="number" step="1" inputmode="numeric"/>
+                  </label>
+                  <label class="setting-field">Allowed weight range (lbs)
+                    <span class="range-inputs"><input id="inMin" type="number" step="1" inputmode="numeric"/><span>to</span><input id="inMax" type="number" step="1" inputmode="numeric"/></span>
+                  </label>
+                </div>
+                <div class="settings-actions">
+                  <button id="saveSettings">Save Settings</button>
+                  <button id="resetSettings">Reset Defaults</button>
+                </div>
+              </div>
+            </details>
           </div>
         </details>
       </div>
@@ -211,7 +242,7 @@
       ? { ...DEFAULTS, ...(savedSettings || {}) }
       : { ...DEFAULTS };
 
-    // Apply the A1 specification once for existing installations with older settings.
+    // Apply the A2 specification once for existing installations with older settings.
     if (localStorage.getItem('a2RockSpecVersion') !== SPEC_VERSION) {
       localStorage.setItem('a2RockSettings', JSON.stringify(SETTINGS));
       localStorage.setItem('a2RockSpecVersion', SPEC_VERSION);
@@ -287,13 +318,23 @@
       return { total, totalWeight, totalTons, avgWeight, undersize, inspec, oversize };
     }
 
-    function badge(pass){ return `<span class="badge ${pass?'pass':'fail'}">${pass?'PASS':'FAIL'}</span>`; }
+    function fmtLb(value){ return Math.round(value).toLocaleString('en-US'); }
+    function badge(state){
+      if (state === null) return '<span class="badge waiting-badge">WAITING</span>';
+      return `<span class="badge ${state?'pass':'fail'}">${state?'PASS':'FAIL'}</span>`;
+    }
+    function rockClassification(weight){
+      if (weight < SETTINGS.inMin) return { rowClass:'rock-fail', label:'UNDERSIZE', badgeClass:'out-spec' };
+      if (weight > SETTINGS.inMax) return { rowClass:'rock-fail', label:'OVERSIZE', badgeClass:'out-spec' };
+      return { rowClass:'rock-pass', label:'IN SPEC', badgeClass:'in-spec' };
+    }
 
     // ===== UI Rendering =====
     function updateDisplay() {
       localStorage.setItem('a2RockAutosave', JSON.stringify(rockWeights));
       const S = SETTINGS;
       const st = stats();
+      const hasRocks = st.total > 0;
 
       currentLog = {
         timestamp: new Date().toLocaleString(),
@@ -305,39 +346,59 @@
         undersize: st.undersize.length,
         inspec: st.inspec.length,
         oversize: st.oversize.length,
-        lotPass: st.total > 0 && st.avgWeight >= S.avgMin && st.undersize.length === 0 && st.oversize.length === 0
+        lotPass: hasRocks && st.avgWeight >= S.avgMin && st.undersize.length === 0 && st.oversize.length === 0
       };
 
-      const avgOk = st.avgWeight >= S.avgMin;
-      const weightsOk = st.undersize.length === 0 && st.oversize.length === 0;
-      const lotPass = st.total > 0 && avgOk && weightsOk;
+      const avgOk = hasRocks && st.avgWeight >= S.avgMin;
+      const weightsOk = hasRocks && st.undersize.length === 0 && st.oversize.length === 0;
+      const lotPass = hasRocks && avgOk && weightsOk;
+      const failures = [];
+      if (hasRocks && st.undersize.length) failures.push(`${st.undersize.length} undersize rock${st.undersize.length === 1 ? '' : 's'}`);
+      if (hasRocks && st.oversize.length) failures.push(`${st.oversize.length} oversize rock${st.oversize.length === 1 ? '' : 's'}`);
+      if (hasRocks && !avgOk) failures.push(`average is ${fmtLb(S.avgMin - st.avgWeight)} lb below minimum`);
+      const lotClass = !hasRocks ? 'waiting' : lotPass ? 'passing' : 'failing';
+      const lotLabel = !hasRocks ? 'ENTER ROCKS' : lotPass ? 'LOT PASSES' : 'LOT FAILS';
+      const lotReason = !hasRocks
+        ? 'Enter the first rock weight to begin.'
+        : lotPass
+          ? `All ${st.total} rock${st.total === 1 ? '' : 's'} meet the weight range and average requirements.`
+          : failures.join(' • ');
+
+      document.getElementById('specBanner').innerHTML =
+        `A2 SPEC: ${fmtLb(S.inMin)}&ndash;${fmtLb(S.inMax)} lb &nbsp;|&nbsp; Average &ge; ${fmtLb(S.avgMin)} lb &nbsp;|&nbsp; Zero out-of-spec allowed`;
 
       const res = `
+        <div class="lot-status-card ${lotClass}">
+          <div class="lot-status-label">LOT STATUS</div>
+          <div class="lot-status-value">${lotLabel}</div>
+          <div class="lot-status-reason">${lotReason}</div>
+        </div>
         <div class="stat-grid">
-          <div class="card"><div class="kv"><strong>Total rocks</strong><div>${st.total}</div></div>
-            <div class="kv"><span class="muted">Total weight</span><div>${st.totalWeight.toFixed(2)} lbs</div></div>
+          <div class="card"><div class="kv"><strong>Rocks entered</strong><div>${st.total}</div></div>
+            <div class="kv"><span class="muted">Total weight</span><div>${fmtLb(st.totalWeight)} lb</div></div>
             <div class="kv"><span class="muted">Total tons</span><div>${st.totalTons.toFixed(3)} tons</div></div>
-            <div class="kv"><span class="muted">Average</span><div>${st.avgWeight.toFixed(2)} lbs ${badge(avgOk)}</div></div>
+            <div class="kv"><span class="muted">Average</span><div>${hasRocks ? `${fmtLb(st.avgWeight)} lb` : '&mdash;'} ${badge(hasRocks ? avgOk : null)}</div></div>
           </div>
-          <div class="card"><div class="kv"><strong>Weight Spec</strong><div>${badge(weightsOk)}</div></div>
-            <div class="kv"><span class="muted">Undersize (&lt;${S.inMin})</span><div>${st.undersize.length}</div></div>
-            <div class="kv"><span class="muted">In-Spec ${S.inMin}-${S.inMax} lbs</span><div>${st.inspec.length}</div></div>
-            <div class="kv"><span class="muted">Oversize (&gt;${S.inMax})</span><div>${st.oversize.length}</div></div>
-          </div>
-          <div class="card"><div class="kv"><strong>LOT STATUS</strong><div>${badge(lotPass)}</div></div>
-            <div class="kv"><span class="muted">Required average</span><div>${S.avgMin.toFixed(0)}+ lbs</div></div>
-            <div class="kv"><span class="muted">Outside range allowed</span><div>0 rocks</div></div>
+          <div class="card"><div class="kv"><strong>Individual weights</strong><div>${badge(hasRocks ? weightsOk : null)}</div></div>
+            <div class="kv"><span class="muted">Undersize (&lt;${fmtLb(S.inMin)})</span><div>${st.undersize.length}</div></div>
+            <div class="kv"><span class="muted">In spec (${fmtLb(S.inMin)}&ndash;${fmtLb(S.inMax)})</span><div>${st.inspec.length}</div></div>
+            <div class="kv"><span class="muted">Oversize (&gt;${fmtLb(S.inMax)})</span><div>${st.oversize.length}</div></div>
           </div>
         </div>`;
 
       document.getElementById('results').innerHTML = res;
 
-      document.getElementById('rockList').innerHTML = `<p><strong>Rocks Entered (click to edit):</strong></p>${rockWeights.map((w, i) => `
-        <div class='log-entry'>
-          <span>${i + 1}:</span>
-          <input type='number' value='${w}' step='0.01' onchange='updateWeight(${i}, this.value)' /> lbs
-          <button class='chip' onclick='removeWeight(${i})'>Remove</button>
-        </div>`).join('')}`;
+      document.getElementById('rockList').innerHTML = rockWeights.length
+        ? `<p><strong>Entered Rocks <span class="muted">(tap a weight to edit)</span></strong></p>${rockWeights.map((w, i) => {
+            const status = rockClassification(w);
+            return `<div class="log-entry ${status.rowClass}">
+              <span>${i + 1}.</span>
+              <input aria-label="Rock ${i + 1} weight" type="number" value="${w}" step="1" onchange="updateWeight(${i}, this.value)" /> lb
+              <span class="rock-status ${status.badgeClass}">${status.label}</span>
+              <button class="chip" onclick="removeWeight(${i})">Remove</button>
+            </div>`;
+          }).join('')}`
+        : '<p class="muted">No rocks entered yet.</p>';
     }
 
     // ===== CRUD operations =====
@@ -461,6 +522,7 @@
       for (const k of fields){ const el = document.getElementById(k); const v = parseFloat(el.value); if(!isNaN(v)) SETTINGS[k] = v; }
       saveSettings();
       document.querySelector('.criteria-settings').open = false;
+      document.querySelector('.more-options').open = false;
     };
     document.getElementById('resetSettings').onclick = resetSettings;
 
@@ -470,4 +532,3 @@
   </script>
 </body>
 </html>
-
