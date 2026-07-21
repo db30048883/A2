@@ -343,6 +343,9 @@
         total: st.total,
         totalTons: +st.totalTons.toFixed(3),
         avgTons: +st.avgTons.toFixed(3),
+        specMin: S.inMin,
+        specMax: S.inMax,
+        requiredAvg: S.avgMin,
         undersize: st.undersize.length,
         inspec: st.inspec.length,
         oversize: st.oversize.length,
@@ -439,26 +442,64 @@
       document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
     }
 
+    function csvCell(value) {
+      const text = String(value ?? '');
+      return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    }
+
+    function csvRow(values) { return values.map(csvCell).join(','); }
+
+    function reportRows(log, title) {
+      const specMin = Number(log.specMin ?? SETTINGS.inMin);
+      const specMax = Number(log.specMax ?? SETTINGS.inMax);
+      const requiredAvg = Number(log.requiredAvg ?? SETTINGS.avgMin);
+      const rows = [
+        [title],
+        [],
+        ['REPORT INFORMATION'],
+        ['Log Date', log.timestamp],
+        ['Generated', new Date().toLocaleString()],
+        [],
+        ['LOT SUMMARY'],
+        ['Lot Status', log.lotPass === true ? 'PASS' : 'FAIL'],
+        ['Allowed Weight Range', `${fmtTons(specMin)}–${fmtTons(specMax)} tons`],
+        ['Required Average', `${fmtTons(requiredAvg)} tons minimum`],
+        ['Total Rocks', log.total],
+        ['Total Tons', (+log.totalTons).toFixed(3)],
+        ['Average Weight (tons)', (+log.avgTons).toFixed(3)],
+        ['Undersize Count', log.undersize || 0],
+        ['In-Spec Count', log.inspec || 0],
+        ['Oversize Count', log.oversize || 0],
+        [],
+        ['ROCK DETAILS'],
+        ['Rock Number', 'Weight (tons)', 'Classification']
+      ];
+
+      log.weights.forEach((weight, index) => {
+        const classification = weight < specMin ? 'UNDERSIZE' : weight > specMax ? 'OVERSIZE' : 'IN SPEC';
+        rows.push([index + 1, Number(weight).toFixed(3), classification]);
+      });
+      return rows;
+    }
+
+    function downloadCsvRows(rows, filename) {
+      const csv = '\uFEFF' + rows.map(csvRow).join('\r\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
     function downloadCSV() {
       const logs = JSON.parse(localStorage.getItem('a2RockLogsTons') || '[]');
       if (!logs.length) { alert('No logs to export.'); return; }
       const log = logs[logs.length - 1];
-      const header = ['Metric', 'Value'];
-      const data = [
-        ['Total Rocks', log.total],
-        ['Total Tons', (+log.totalTons).toFixed(3)],
-        ['Average (tons)', (+log.avgTons).toFixed(3)],
-        ['Undersize', log.undersize || 0],
-        ['In Spec', log.inspec || 0],
-        ['Oversize', log.oversize || 0],
-        ['Lot Status', log.lotPass === true ? 'PASS' : 'FAIL'],
-        ...log.weights.map((w, i) => [`Rock ${i + 1} (tons)`, w])
-      ];
-      const csv = [header, ...data].map(row => row.join(',')).join('\n');
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = `a2_log_${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+      downloadCsvRows(reportRows(log, 'A2 GRADATION REPORT'), `A2_Gradation_Report_${new Date().toISOString().split('T')[0]}.csv`);
     }
 
     function downloadAllLogsTxt() {
@@ -474,16 +515,16 @@
     function downloadAllLogsCSV() {
       const logs = JSON.parse(localStorage.getItem('a2RockLogsTons') || '[]');
       if (!logs.length) { alert('No logs available.'); return; }
-      let csv = 'Log,Timestamp,Total Rocks,Total Tons,Average (tons),Undersize,In Spec,Oversize,Lot Status,Rock #,Weight (tons)\n';
+      const rows = [
+        ['A2 ALL GRADATION LOGS'],
+        ['Generated', new Date().toLocaleString()],
+        ['Total Logs', logs.length],
+        []
+      ];
       logs.forEach((log, idx) => {
-        log.weights.forEach((w, i) => {
-          csv += `${idx + 1},${log.timestamp},${log.total},${(+log.totalTons).toFixed(3)},${(+log.avgTons).toFixed(3)},${log.undersize || 0},${log.inspec || 0},${log.oversize || 0},${log.lotPass === true ? 'PASS' : 'FAIL'},${i + 1},${w}\n`;
-        });
+        rows.push(...reportRows(log, `LOG ${idx + 1}`), [], []);
       });
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = `a2_logs_all_${new Date().toISOString().split('T')[0]}.csv`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+      downloadCsvRows(rows, `A2_All_Gradation_Logs_${new Date().toISOString().split('T')[0]}.csv`);
     }
 
     function clearAllLogs() {
